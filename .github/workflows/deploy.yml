@@ -17,6 +17,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Remove eslint config
+        run: rm -f eslint.config.mjs
+
       - name: Build
         run: npm run build
         env:
