@@ -1,73 +1,58 @@
-import { createServerSupabase } from "@/lib/supabase/server";
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import type { Video, AboutImage } from "@/lib/types";
 import HeroSection from "@/components/HeroSection";
 import VideoPreviewSection from "@/components/VideoPreviewSection";
 import AboutSection from "@/components/AboutSection";
 import ContactSection from "@/components/ContactSection";
 
-async function getSiteContents() {
-  try {
-    const supabase = await createServerSupabase();
-    const { data } = await supabase.from("site_content").select("*");
-    const map: Record<string, string> = {};
-    if (data) {
-      for (const row of data) {
-        map[row.section_key] = row.content;
-      }
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
+export default function HomePage() {
+  const [contents, setContents] = useState<Record<string, string>>({});
+  const [videosByCategory, setVideosByCategory] = useState<Record<string, Video[]>>({ brand: [], operation: [], event: [] });
+  const [aboutImages, setAboutImages] = useState<AboutImage[]>([]);
 
-async function getVideosByCategory() {
-  try {
-    const supabase = await createServerSupabase();
-    const { data } = await supabase
+  useEffect(() => {
+    const supabase = createClient();
+
+    supabase
+      .from("site_content")
+      .select("*")
+      .then(({ data }) => {
+        const map: Record<string, string> = {};
+        if (data) {
+          for (const row of data) {
+            map[row.section_key] = row.content;
+          }
+        }
+        setContents(map);
+      }, () => {});
+
+    supabase
       .from("videos")
       .select("*")
-      .order("sort_order", { ascending: true });
-
-    const map: Record<string, Video[]> = {
-      brand: [],
-      operation: [],
-      event: [],
-    };
-
-    if (data) {
-      for (const video of data) {
-        if (map[video.category]) {
-          map[video.category].push(video);
+      .order("sort_order", { ascending: true })
+      .then(({ data }) => {
+        const map: Record<string, Video[]> = { brand: [], operation: [], event: [] };
+        if (data) {
+          for (const video of data) {
+            if (map[video.category]) {
+              map[video.category].push(video);
+            }
+          }
         }
-      }
-    }
-    return map;
-  } catch {
-    return { brand: [], operation: [], event: [] };
-  }
-}
+        setVideosByCategory(map);
+      }, () => {});
 
-async function getAboutImages() {
-  try {
-    const supabase = await createServerSupabase();
-    const { data } = await supabase
+    supabase
       .from("about_images")
       .select("*")
-      .order("sort_order", { ascending: true });
-
-    return (data as AboutImage[]) || [];
-  } catch {
-    return [];
-  }
-}
-
-export default async function HomePage() {
-  const [contents, videosByCategory, aboutImages] = await Promise.all([
-    getSiteContents(),
-    getVideosByCategory(),
-    getAboutImages(),
-  ]);
+      .order("sort_order", { ascending: true })
+      .then(({ data }) => {
+        setAboutImages((data as AboutImage[]) || []);
+      }, () => {});
+  }, []);
 
   return (
     <>
