@@ -8,6 +8,10 @@ interface Props {
   params: Promise<{ category: string }>;
 }
 
+export function generateStaticParams() {
+  return Object.keys(VIDEO_CATEGORIES).map((key) => ({ category: key }));
+}
+
 export async function generateMetadata({ params }: Props) {
   const { category } = await params;
   const info = VIDEO_CATEGORIES[category as VideoCategory];
