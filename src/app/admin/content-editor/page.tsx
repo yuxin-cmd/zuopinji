@@ -43,7 +43,7 @@ export default function ContentEditorPage() {
 
     const { error } = await supabase
       .from("site_content")
-      .upsert({ section_key: key, content: value, updated_at: new Date().toISOString() });
+      .upsert({ section_key: key, content: value, updated_at: new Date().toISOString() }, { onConflict: "section_key" });
 
     if (error) {
       setMessage("保存失败：" + error.message);
