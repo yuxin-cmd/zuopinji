@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Video, VideoCategory } from "@/lib/types";
 import { VIDEO_CATEGORIES } from "@/lib/types";
@@ -9,14 +9,16 @@ export default function VideoManagerPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // form state
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<VideoCategory>("brand");
   const [bilibiliUrl, setBilibiliUrl] = useState("");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadVideos();
@@ -38,6 +40,7 @@ export default function VideoManagerPage() {
     setTitle("");
     setCategory("brand");
     setBilibiliUrl("");
+    setVideoFile(null);
     setError("");
     setShowForm(true);
   }
@@ -46,26 +49,61 @@ export default function VideoManagerPage() {
     setEditingId(v.id);
     setTitle(v.title);
     setCategory(v.category);
-    setBilibiliUrl(v.bilibili_url);
+    setBilibiliUrl(v.bilibili_url || "");
+    setVideoFile(null);
     setError("");
     setShowForm(true);
   }
 
   async function handleSave() {
-    if (!title.trim() || !bilibiliUrl.trim()) {
-      setError("请填写标题和B站链接");
+    if (!title.trim()) {
+      setError("请填写标题");
+      return;
+    }
+    if (!bilibiliUrl.trim() && !videoFile && !editingId) {
+      setError("请填写B站链接或上传视频文件");
       return;
     }
     setSaving(true);
     setError("");
 
     const supabase = createClient();
+    let videoUrl: string | undefined;
+
+    // 如果上传了新文件，先上传到 Supabase Storage
+    if (videoFile) {
+      setUploading(true);
+      const ext = videoFile.name.split(".").pop() || "mp4";
+      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(fileName, videoFile);
+
+      if (uploadError) {
+        setError("视频上传失败：" + uploadError.message);
+        setSaving(false);
+        setUploading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("videos")
+        .getPublicUrl(uploadData.path);
+
+      videoUrl = urlData.publicUrl;
+      setUploading(false);
+    }
+
+    // 保存到数据库
+    const payload = {
+      title: title.trim(),
+      category,
+      bilibili_url: bilibiliUrl.trim(),
+      ...(videoUrl ? { video_url: videoUrl } : {}),
+    };
 
     if (editingId) {
-      await supabase
-        .from("videos")
-        .update({ title: title.trim(), category, bilibili_url: bilibiliUrl.trim() })
-        .eq("id", editingId);
+      await supabase.from("videos").update(payload).eq("id", editingId);
     } else {
       const { data: existing } = await supabase
         .from("videos")
@@ -77,9 +115,7 @@ export default function VideoManagerPage() {
       const nextOrder = ((existing?.[0] as { sort_order: number } | undefined)?.sort_order ?? -1) + 1;
 
       await supabase.from("videos").insert({
-        title: title.trim(),
-        category,
-        bilibili_url: bilibiliUrl.trim(),
+        ...payload,
         sort_order: nextOrder,
       });
     }
@@ -89,11 +125,24 @@ export default function VideoManagerPage() {
     loadVideos();
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(v: Video) {
     if (!confirm("确定要删除这个视频吗？")) return;
     const supabase = createClient();
-    await supabase.from("videos").delete().eq("id", id);
+    // 删除时也删除存储桶中的文件
+    if (v.video_url) {
+      const urlPath = v.video_url.split("/").pop();
+      if (urlPath) {
+        await supabase.storage.from("videos").remove([urlPath]);
+      }
+    }
+    await supabase.from("videos").delete().eq("id", v.id);
     loadVideos();
+  }
+
+  function getVideoType(v: Video): string {
+    if (v.video_url) return "本地上传";
+    if (v.bilibili_url) return "B站";
+    return "无链接";
   }
 
   return (
@@ -137,17 +186,50 @@ export default function VideoManagerPage() {
                 ))}
               </select>
             </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
-                B站视频链接
+                视频来源
               </label>
-              <input
-                type="text"
-                value={bilibiliUrl}
-                onChange={(e) => setBilibiliUrl(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400"
-                placeholder="https://www.bilibili.com/video/BVxxxxxx 或直接粘贴BV号"
-              />
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                {/* B站链接 */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">B站视频链接（可选）</label>
+                  <input
+                    type="text"
+                    value={bilibiliUrl}
+                    onChange={(e) => setBilibiliUrl(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                    placeholder="https://www.bilibili.com/video/BVxxxxxx"
+                  />
+                </div>
+
+                {/* 分隔线 */}
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span className="text-xs text-slate-400">或</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
+
+                {/* 本地上传 */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    上传视频文件
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/ogg"
+                    onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                    className="w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-600 hover:file:bg-primary-100"
+                  />
+                  {videoFile && (
+                    <p className="mt-1 text-xs text-green-600">
+                      已选择：{videoFile.name}（{(videoFile.size / 1024 / 1024).toFixed(1)} MB）
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <div className="mt-4 flex gap-2">
@@ -156,7 +238,7 @@ export default function VideoManagerPage() {
               disabled={saving}
               className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
             >
-              {saving ? "保存中..." : "保存"}
+              {uploading ? "上传视频中..." : saving ? "保存中..." : "保存"}
             </button>
             <button
               onClick={() => setShowForm(false)}
@@ -182,7 +264,9 @@ export default function VideoManagerPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-800 truncate">{v.title}</p>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {VIDEO_CATEGORIES[v.category]?.label} · {v.bilibili_url}
+                  {VIDEO_CATEGORIES[v.category]?.label}
+                  {" · "}
+                  {v.video_url ? "本地上传" : v.bilibili_url ? `B站: ${v.bilibili_url}` : "无链接"}
                 </p>
               </div>
               <div className="ml-4 flex gap-2 shrink-0">
@@ -193,7 +277,7 @@ export default function VideoManagerPage() {
                   编辑
                 </button>
                 <button
-                  onClick={() => handleDelete(v.id)}
+                  onClick={() => handleDelete(v)}
                   className="rounded-lg px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
                 >
                   删除

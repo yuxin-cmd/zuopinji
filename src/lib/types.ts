@@ -5,6 +5,7 @@ export interface Video {
   title: string;
   category: VideoCategory;
   bilibili_url: string;
+  video_url?: string;
   sort_order: number;
   created_at: string;
 }

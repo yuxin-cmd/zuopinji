@@ -3,12 +3,13 @@
 import { useEffect, useRef } from "react";
 
 interface VideoModalProps {
-  embedUrl: string;
+  embedUrl?: string;
+  videoUrl?: string;
   title: string;
   onClose: () => void;
 }
 
-export default function VideoModal({ embedUrl, title, onClose }: VideoModalProps) {
+export default function VideoModal({ embedUrl, videoUrl, title, onClose }: VideoModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,13 +45,24 @@ export default function VideoModal({ embedUrl, title, onClose }: VideoModalProps
           </button>
         </div>
         <div className="aspect-video w-full">
-          <iframe
-            src={embedUrl}
-            title={title}
-            className="h-full w-full"
-            allow="autoplay; fullscreen"
-            allowFullScreen
-          />
+          {embedUrl ? (
+            <iframe
+              src={embedUrl}
+              title={title}
+              className="h-full w-full"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+            />
+          ) : videoUrl ? (
+            <video
+              src={videoUrl}
+              controls
+              className="h-full w-full"
+              autoPlay
+            >
+              <source src={videoUrl} type="video/mp4" />
+            </video>
+          ) : null}
         </div>
       </div>
     </div>
