@@ -61,3 +61,6 @@ CREATE POLICY "Auth delete videos" ON videos FOR DELETE USING (auth.role() = 'au
 CREATE POLICY "Auth insert about_images" ON about_images FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 CREATE POLICY "Auth update about_images" ON about_images FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "Auth delete about_images" ON about_images FOR DELETE USING (auth.role() = 'authenticated');
+
+-- 迁移：支持本地上传视频
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS video_url TEXT;

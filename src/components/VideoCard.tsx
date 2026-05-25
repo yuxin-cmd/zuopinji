@@ -19,14 +19,34 @@ function extractBvid(url: string): string | null {
   return null;
 }
 
+function extractTencentVid(url: string): string | null {
+  // 腾讯视频链接: v.qq.com/x/page/VID.html 或 v.qq.com/x/cover/xxx/VID.html
+  const match = url.match(/v\.qq\.com\/.*?\/([a-z0-9]+)\.html/i);
+  return match ? match[1] : null;
+}
+
 function getBilibiliEmbedUrl(bvid: string): string {
   return `https://player.bilibili.com/player.html?bvid=${bvid}&page=1&autoplay=1`;
 }
 
+function getTencentEmbedUrl(vid: string): string {
+  return `https://v.qq.com/txp/iframe/player.html?vid=${vid}&autoplay=0`;
+}
+
+function getEmbedUrl(url: string): string | null {
+  const bvid = extractBvid(url);
+  if (bvid) return getBilibiliEmbedUrl(bvid);
+
+  const tvid = extractTencentVid(url);
+  if (tvid) return getTencentEmbedUrl(tvid);
+
+  return null;
+}
+
 export default function VideoCard({ video }: { video: Video }) {
   const [showModal, setShowModal] = useState(false);
-  const bvid = video.bilibili_url ? extractBvid(video.bilibili_url) : null;
-  const clickable = !!(bvid || video.video_url);
+  const embedUrl = video.bilibili_url ? getEmbedUrl(video.bilibili_url) : null;
+  const clickable = !!(embedUrl || video.video_url);
 
   return (
     <>
@@ -63,7 +83,7 @@ export default function VideoCard({ video }: { video: Video }) {
 
       {showModal && (
         <VideoModal
-          embedUrl={bvid ? getBilibiliEmbedUrl(bvid) : undefined}
+          embedUrl={embedUrl || undefined}
           videoUrl={video.video_url}
           title={video.title}
           onClose={() => setShowModal(false)}

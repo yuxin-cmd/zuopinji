@@ -61,7 +61,7 @@ export default function VideoManagerPage() {
       return;
     }
     if (!bilibiliUrl.trim() && !videoFile && !editingId) {
-      setError("请填写B站链接或上传视频文件");
+      setError("请填写视频链接或上传视频文件");
       return;
     }
     setSaving(true);
@@ -141,7 +141,10 @@ export default function VideoManagerPage() {
 
   function getVideoType(v: Video): string {
     if (v.video_url) return "本地上传";
-    if (v.bilibili_url) return "B站";
+    if (v.bilibili_url) {
+      if (/v\.qq\.com/i.test(v.bilibili_url)) return "腾讯视频";
+      return "B站";
+    }
     return "无链接";
   }
 
@@ -192,15 +195,15 @@ export default function VideoManagerPage() {
                 视频来源
               </label>
               <div className="rounded-lg border border-slate-200 p-4 space-y-3">
-                {/* B站链接 */}
+                {/* 视频链接 */}
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500">B站视频链接（可选）</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">B站 / 腾讯视频链接（可选）</label>
                   <input
                     type="text"
                     value={bilibiliUrl}
                     onChange={(e) => setBilibiliUrl(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400"
-                    placeholder="https://www.bilibili.com/video/BVxxxxxx"
+                    placeholder="B站: https://www.bilibili.com/video/BVxxxxxx 或 腾讯: https://v.qq.com/x/page/xxxxx.html"
                   />
                 </div>
 
@@ -266,7 +269,7 @@ export default function VideoManagerPage() {
                 <p className="text-xs text-slate-400 mt-0.5">
                   {VIDEO_CATEGORIES[v.category]?.label}
                   {" · "}
-                  {v.video_url ? "本地上传" : v.bilibili_url ? `B站: ${v.bilibili_url}` : "无链接"}
+                  {getVideoType(v)}{v.bilibili_url ? ` · ${v.bilibili_url}` : ""}
                 </p>
               </div>
               <div className="ml-4 flex gap-2 shrink-0">
